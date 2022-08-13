@@ -1,0 +1,84 @@
+FROM continuumio/anaconda3:2021.05
+
+# install prerequistites
+ENV DEBCONF_NOWARNINGS yes
+RUN apt-get update && \
+    apt-get install -y wget git unzip p7zip-full && \
+    apt-get autoremove -y
+
+# copy the seq2point-nilm
+COPY ./seq2point-nilm /seq2point-nilm
+
+# create a Python environment for seq2point-nilm installing python prerequistites
+WORKDIR /seq2point-nilm
+RUN conda env create -f environment.yml
+
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES utility,compute
+
+# download the REFIT dataset file
+WORKDIR /seq2point-nilm/dataset_management/refit
+RUN wget https://pureportal.strath.ac.uk/files/62090184/CLEAN_REFIT_081116.7z && \
+    7z x -oCLEAN_REFIT_081116 CLEAN_REFIT_081116.7z && \
+    rm -f CLEAN_REFIT_081116.7z
+
+# download the UK-DALE datasets file
+WORKDIR /seq2point-nilm/dataset_management/ukdale
+RUN wget http://data.ukedc.rl.ac.uk/simplebrowse/edc/efficiency/residential/EnergyConsumption/Domestic/UK-DALE-2017/UK-DALE-FULL-disaggregated/ukdale.zip && \
+    unzip ukdale.zip -d ukdale && \
+    rm -f ukdale.zip
+
+# download the REDD datasets file
+WORKDIR /seq2point-nilm/dataset_management/redd
+RUN wget --http-user="redd" --http-password="disaggregatetheenergy" http://redd.csail.mit.edu/data/low_freq.tar.bz2 && \
+    tar -jxvf low_freq.tar.bz2 && \
+    rm -f low_freq.tar.bz2
+
+ARG AGGREGATE_MEAN=522
+ARG AGGREGATE_STD=814
+
+# create a REFIT dataset
+WORKDIR /seq2point-nilm/dataset_management/refit
+RUN mkdir dataset && \
+    cd dataset && \
+    python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'kettle' --save_path './' && \
+    python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'microwave' --save_path './' && \
+    python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'fridge' --save_path './' && \
+    python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'dishwasher' --save_path './' && \
+    python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'washingmachine' --save_path './'
+    #python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'kettle' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './' && \
+    #python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'microwave' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './' && \
+    #python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'fridge' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './' && \
+    #python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'dishwasher' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './'
+    #python ../create_dataset.py --data_dir '../CLEAN_REFIT_081116/' --appliance_name 'washingmachine' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './'
+
+# create a UK-DALE dataset
+WORKDIR /seq2point-nilm/dataset_management/ukdale
+RUN mkdir dataset && \
+    mkdir dataset/kettle dataset/microwave dataset/fridge dataset/dishwasher dataset/washingmachine && \
+    PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'kettle' --save_path './dataset/kettle/' && \
+    PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'microwave' --save_path './dataset/microwave/' && \
+    PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'fridge' --save_path './dataset/fridge/' && \
+    PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'dishwasher' --save_path './dataset/dishwasher/' && \
+    PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'washingmachine' --save_path './dataset/washingmachine/'
+    #PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'kettle' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/kettle/' && \
+    #PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'microwave' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/microwave/'
+    #PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'fridge' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/fridge/'
+    #PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'dishwasher' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/dishwasher/'
+    #PYTHONPATH="${PYTHONPATH}:../" python create_trainset_ukdale.py --data_dir './ukdale/' --appliance_name 'washingmachine' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/washingmachine/'
+
+# create a REDD dataset
+WORKDIR /seq2point-nilm/dataset_management/redd
+RUN mkdir dataset && \
+    mkdir dataset/microwave dataset/fridge dataset/dishwasher dataset/washingmachine && \
+    python create_trainset_redd.py --data_dir './low_freq/' --appliance_name 'microwave' --save_path './dataset/microwave/' && \
+    python create_trainset_redd.py --data_dir './low_freq/' --appliance_name 'fridge' --save_path './dataset/fridge/' && \
+    python create_trainset_redd.py --data_dir './low_freq/' --appliance_name 'dishwasher' --save_path './dataset/dishwasher/' && \
+    python create_trainset_redd.py --data_dir './low_freq/' --appliance_name 'washingmachine' --save_path './dataset/washingmachine/'
+    #python create_trainset_redd.py --data_dir './low_freq/' --appliance_name 'microwave' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/microwave/'
+    #python create_trainset_redd.py --data_dir './low_freq/' --appliance_name 'fridge' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/fridge/'
+    #python create_trainset_redd.py --data_dir './low_freq/' --appliance_name 'dishwasher' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/dishwasher/'
+    #python create_trainset_redd.py --data_dir './low_freq/' --appliance_name 'washingmachine' --aggregate_mean AGGREGATE_MEAN --aggregate_std AGGREGATE_STD --save_path './dataset/washingmachine/'
+
+WORKDIR /seq2point-nilm
+ENTRYPOINT ["/bin/bash"]
