@@ -1,0 +1,3 @@
+[submodule "seq2point-nilm"]
+	path = seq2point-nilm
+	url = https://github.com/MingjunZhong/seq2point-nilm
